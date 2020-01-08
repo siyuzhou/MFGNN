@@ -40,7 +40,6 @@ class GraphConv(keras.Model):
                                 params['node_decoder']['kernel_l2'],
                                 name='node_decoder')
 
-        self.dense = keras.layers.Dense(params['ndims'], name='out_layer')
         self.aneal = params['lambda']
         if self.aneal > 1 or self.aneal < 0:
             raise ValueError('aneal factor must be within 0 and 1')
@@ -50,9 +49,9 @@ class GraphConv(keras.Model):
         self.edge_aggr = EdgeAggregator(edges)
 
     def call(self, inputs, training=False):
-        # `inputs` are node states.
         # Form edges. Shape [batch, num_edges, 1, filters]
-        edge_msg = self.node_aggr(inputs)
+        node_states, edge_types = inputs
+        edge_msg = self.node_aggr(node_states)
 
         if self.edge_type > 1:
             encoded_msg_by_type = []
@@ -83,10 +82,8 @@ class GraphConv(keras.Model):
 
         node_msg = (1 - self.aneal) * node_msg_skip + self.aneal * node_msg
 
-        # The last state in each timeseries of the stack.
-        prev_state = time_segs[:, :, -1:, :]
         # Skip connection
-        node_state = tf.concat([prev_state, node_msg], axis=-1)
+        node_state = tf.concat([node_states, node_msg], axis=-1)
         node_state = self.node_decoder(node_state, training=training)
 
         return node_state
@@ -106,11 +103,12 @@ class SwarmNet(keras.Model):
             self.conv1d = keras.layers.Lambda(lambda x: x)
 
         self.graph_conv = GraphConv(params)
+        self.dense = keras.layers.Dense(params['ndims'], name='out_layer')
 
     def build(self, input_shape):
         t = keras.layers.Input(input_shape[0][1:])
         inputs = [t]
-        if self.edge_type > 1:
+        if self.graph_conv.edge_type > 1:
             e = keras.layers.Input(input_shape[1][1:])
             inputs.append(e)
 
@@ -122,9 +120,11 @@ class SwarmNet(keras.Model):
         condensed_state = self.conv1d(time_segs)
         # condensed_state shape [batch, num_agents, 1, filters]
 
-        node_state = self.graph_conv(condensed_state, training)
+        node_state = self.graph_conv([condensed_state, edge_types], training)
 
         # Predicted difference added to the prev state.
+        # The last state in each timeseries of the stack.
+        prev_state = time_segs[:, :, -1:, :]
         next_state = prev_state + self.dense(node_state)
         return next_state
 
@@ -132,7 +132,7 @@ class SwarmNet(keras.Model):
         # time_segs shape [batch, time_seg_len, num_agents, ndims]
         # Transpose to [batch, num_agents, time_seg_len,ndims]
         time_segs = inputs[0]
-        if self.edge_type > 1:
+        if self.graph_conv.edge_type > 1:
             edge_types = tf.expand_dims(inputs[1], axis=3)
             # Shape [None, n_edges, n_types, 1]
         else:
