@@ -7,22 +7,13 @@ from .modules import *
 from .utils import fc_matrix
 
 
-class SwarmNet(keras.Model):
+class GraphConv(keras.Model):
     def __init__(self, params):
-        super().__init__(name='SwarmNet')
-
-        # NOTE: For the moment assume Conv1D is always applied
-        self.pred_steps = params['pred_steps']
-        self.time_seg_len = params['time_seg_len']
+        super().__init__(name='GraphConv')
 
         # Whether edge type used for model.
         self.edge_type = params['edge_type']
         self.skip_zero = 1 if self.edge_type > 1 and params.get('skip_zero', False) else 0
-
-        if self.time_seg_len > 1:
-            self.conv1d = Conv1D(params['cnn']['filters'], name='Conv1D')
-        else:
-            self.conv1d = keras.layers.Lambda(lambda x: x)
 
         if self.edge_type > 1:
             self.edge_encoders = [MLP(params['edge_encoder']['hidden_units'],
@@ -58,23 +49,10 @@ class SwarmNet(keras.Model):
         self.node_aggr = NodeAggregator(edges)
         self.edge_aggr = EdgeAggregator(edges)
 
-    def build(self, input_shape):
-        t = keras.layers.Input(input_shape[0][1:])
-        inputs = [t]
-        if self.edge_type > 1:
-            e = keras.layers.Input(input_shape[1][1:])
-            inputs.append(e)
-
-        self.call(inputs)
-        self.built = True
-        return inputs
-
-    def _pred_next(self, time_segs, edge_types=None, training=False):
-        condensed_state = self.conv1d(time_segs)
-        # condensed_state shape [batch, num_agents, 1, filters]
-
+    def call(self, inputs, training=False):
+        # `inputs` are node states.
         # Form edges. Shape [batch, num_edges, 1, filters]
-        edge_msg = self.node_aggr(condensed_state)
+        edge_msg = self.node_aggr(inputs)
 
         if self.edge_type > 1:
             encoded_msg_by_type = []
@@ -110,6 +88,41 @@ class SwarmNet(keras.Model):
         # Skip connection
         node_state = tf.concat([prev_state, node_msg], axis=-1)
         node_state = self.node_decoder(node_state, training=training)
+
+        return node_state
+
+
+class SwarmNet(keras.Model):
+    def __init__(self, params):
+        super().__init__(name='SwarmNet')
+
+        # NOTE: For the moment assume Conv1D is always applied
+        self.pred_steps = params['pred_steps']
+        self.time_seg_len = params['time_seg_len']
+
+        if self.time_seg_len > 1:
+            self.conv1d = Conv1D(params['cnn']['filters'], name='Conv1D')
+        else:
+            self.conv1d = keras.layers.Lambda(lambda x: x)
+
+        self.graph_conv = GraphConv(params)
+
+    def build(self, input_shape):
+        t = keras.layers.Input(input_shape[0][1:])
+        inputs = [t]
+        if self.edge_type > 1:
+            e = keras.layers.Input(input_shape[1][1:])
+            inputs.append(e)
+
+        self.call(inputs)
+        self.built = True
+        return inputs
+
+    def _pred_next(self, time_segs, edge_types=None, training=False):
+        condensed_state = self.conv1d(time_segs)
+        # condensed_state shape [batch, num_agents, 1, filters]
+
+        node_state = self.graph_conv(condensed_state, training)
 
         # Predicted difference added to the prev state.
         next_state = prev_state + self.dense(node_state)
