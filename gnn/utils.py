@@ -1,4 +1,6 @@
+import os
 import tensorflow as tf
+from tensorflow import keras
 import numpy as np
 
 
@@ -43,3 +45,18 @@ def stack_time_series(time_series, seg_len, axis=2):
     time_steps = time_series.shape[1]
     return np.stack([time_series[:, i:time_steps+1-seg_len+i, :, :] for i in range(seg_len)],
                     axis=axis)
+
+
+def load_model(model, log_dir):
+    checkpoint = os.path.join(log_dir, 'weights.h5')
+    if os.path.exists(checkpoint):
+        model.load_weights(checkpoint)
+
+
+def save_model(model, log_dir):
+    os.makedirs(log_dir, exist_ok=True)
+    checkpoint = os.path.join(log_dir, 'weights.h5')
+
+    model.save_weights(checkpoint)
+
+    return keras.callbacks.ModelCheckpoint(checkpoint, save_weights_only=True)

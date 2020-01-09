@@ -1,4 +1,3 @@
-import os
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
@@ -151,38 +150,23 @@ class SwarmNet(keras.Model):
         # Return only the predicted part of extended_time_segs
         return extended_time_segs[:, self.time_seg_len:, :, :]
 
+    @classmethod
+    def build_model(cls, params, return_inputs=False):
+        model = cls(params)
 
-def build_model(params, return_inputs=False):
-    model = SwarmNet(params)
+        optimizer = keras.optimizers.Adam(lr=params['learning_rate'])
 
-    optimizer = keras.optimizers.Adam(lr=params['learning_rate'])
+        model.compile(optimizer, loss='mse')
 
-    model.compile(optimizer, loss='mse')
+        if params['edge_type'] > 1:
+            input_shape = [(None, params['time_seg_len'], params['nagents'], params['ndims']),
+                           (None, params['nagents']*(params['nagents']-1), params['edge_type'])]
+        else:
+            input_shape = [(None, params['time_seg_len'], params['nagents'], params['ndims'])]
 
-    if params['edge_type'] > 1:
-        input_shape = [(None, params['time_seg_len'], params['nagents'], params['ndims']),
-                       (None, params['nagents']*(params['nagents']-1), params['edge_type'])]
-    else:
-        input_shape = [(None, params['time_seg_len'], params['nagents'], params['ndims'])]
+        inputs = model.build(input_shape)
 
-    inputs = model.build(input_shape)
+        if return_inputs:
+            return model, inputs
 
-    if return_inputs:
-        return model, inputs
-
-    return model
-
-
-def load_model(model, log_dir):
-    checkpoint = os.path.join(log_dir, 'weights.h5')
-    if os.path.exists(checkpoint):
-        model.load_weights(checkpoint)
-
-
-def save_model(model, log_dir):
-    os.makedirs(log_dir, exist_ok=True)
-    checkpoint = os.path.join(log_dir, 'weights.h5')
-
-    model.save_weights(checkpoint)
-
-    return keras.callbacks.ModelCheckpoint(checkpoint, save_weights_only=True)
+        return model

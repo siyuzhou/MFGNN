@@ -45,13 +45,13 @@ def main():
 
     model_params.update({'nagents': nagents, 'ndims': ndims,
                          'pred_steps': ARGS.pred_steps, 'time_seg_len': seg_len})
-    model = gnn.build_model(model_params)
+    model = gnn.SwarmNet.build_model(model_params)
     # model.summary()
 
-    gnn.load_model(model, ARGS.log_dir)
+    gnn.utils.load_model(model, ARGS.log_dir)
 
     if ARGS.train:
-        checkpoint = gnn.save_model(model, ARGS.log_dir)
+        checkpoint = gnn.utils.save_model(model, ARGS.log_dir)
 
         # Freeze some of the layers according to train mode.
         if ARGS.train_mode == 1:
@@ -130,14 +130,6 @@ if __name__ == '__main__':
     ARGS.log_dir = os.path.expanduser(ARGS.log_dir)
 
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-
-    config = tf.compat.v1.ConfigProto()
-    config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
-    # to log device placement (on which device the operation ran)
-    config.log_device_placement = False
-    # (nothing gets printed in Jupyter, only if you run it standalone)
-    sess = tf.compat.v1.Session(config=config)
-    # set this TensorFlow session as the default session for Keras
-    tf.compat.v1.keras.backend.set_session(sess)
+    os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 
     main()

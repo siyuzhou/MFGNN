@@ -1,3 +1,4 @@
-from .swarmnet import SwarmNet, build_model, save_model, load_model
+from .swarmnet import SwarmNet
+from .mfgnn import MFGNN
 from . import utils
 from . import data
