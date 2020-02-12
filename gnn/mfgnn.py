@@ -1,4 +1,3 @@
-import os
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
@@ -9,7 +8,7 @@ from .utils import fc_matrix
 
 class GraphConv(keras.Model):
     def __init__(self, params):
-        super().__init__(name='GraphConv')
+        super().__init__()
 
         # self.node_encoder = MLP(params['node_encoder']['hidden_units'],
         #                         params['node_encoder']['dropout'],
@@ -103,6 +102,8 @@ class MFGNN(keras.Model):
         else:
             self.conv1d = keras.layers.Lambda(lambda x: x)
 
+        self.edge_type = params['edge_type']
+
         self.n_gc_filters = params['gc_filters']
         self.gc_filters = []
         for _ in range(self.n_gc_filters):
@@ -119,7 +120,7 @@ class MFGNN(keras.Model):
     def build(self, input_shape):
         t = keras.layers.Input(input_shape[0][1:])
         inputs = [t]
-        if self.graph_conv.edge_type > 1:
+        if self.edge_type > 1:
             e = keras.layers.Input(input_shape[1][1:])
             inputs.append(e)
 
@@ -127,14 +128,14 @@ class MFGNN(keras.Model):
         self.built = True
         return inputs
 
-    @tf.funcion
+    # @tf.function
     def _pred_next(self, time_segs, edge_types=None, training=False):
         condensed_state = self.conv1d(time_segs)
         # condensed_state shape [batch, num_agents, 1, filters]
 
         node_msgs = []
         for graph_conv in self.gc_filters:
-            node_msg = self.graph_conv([condensed_state, edge_types], training)
+            node_msg = graph_conv([condensed_state, edge_types], training)
             node_msgs.append(node_msg)
 
         node_msg_sum = tf.reduce_sum(tf.stack(node_msgs, axis=0), axis=0)
@@ -149,7 +150,7 @@ class MFGNN(keras.Model):
         # time_segs shape [batch, time_seg_len, num_agents, ndims]
         # Transpose to [batch, num_agents, time_seg_len,ndims]
         time_segs = inputs[0]
-        if self.graph_conv.edge_type > 1:
+        if self.edge_type > 1:
             edge_types = tf.expand_dims(inputs[1], axis=3)
             # Shape [None, n_edges, n_types, 1]
         else:
@@ -168,38 +169,23 @@ class MFGNN(keras.Model):
         # Return only the predicted part of extended_time_segs
         return extended_time_segs[:, self.time_seg_len:, :, :]
 
+    @classmethod
+    def build_model(cls, params, return_inputs=False):
+        model = cls(params)
 
-def build_model(params, return_inputs=False):
-    model = SwarmNet(params)
+        optimizer = keras.optimizers.Adam(lr=params['learning_rate'])
 
-    optimizer = keras.optimizers.Adam(lr=params['learning_rate'])
+        model.compile(optimizer, loss='mse')
 
-    model.compile(optimizer, loss='mse')
+        if params['edge_type'] > 1:
+            input_shape = [(None, params['time_seg_len'], params['nagents'], params['ndims']),
+                           (None, params['nagents']*(params['nagents']-1), params['edge_type'])]
+        else:
+            input_shape = [(None, params['time_seg_len'], params['nagents'], params['ndims'])]
 
-    if params['edge_type'] > 1:
-        input_shape = [(None, params['time_seg_len'], params['nagents'], params['ndims']),
-                       (None, params['nagents']*(params['nagents']-1), params['edge_type'])]
-    else:
-        input_shape = [(None, params['time_seg_len'], params['nagents'], params['ndims'])]
+        inputs = model.build(input_shape)
 
-    inputs = model.build(input_shape)
+        if return_inputs:
+            return model, inputs
 
-    if return_inputs:
-        return model, inputs
-
-    return model
-
-
-def load_model(model, log_dir):
-    checkpoint = os.path.join(log_dir, 'weights.h5')
-    if os.path.exists(checkpoint):
-        model.load_weights(checkpoint)
-
-
-def save_model(model, log_dir):
-    os.makedirs(log_dir, exist_ok=True)
-    checkpoint = os.path.join(log_dir, 'weights.h5')
-
-    model.save_weights(checkpoint)
-
-    return keras.callbacks.ModelCheckpoint(checkpoint, save_weights_only=True)
+        return model
