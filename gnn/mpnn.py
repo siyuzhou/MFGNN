@@ -28,20 +28,11 @@ class GraphConv(keras.Model):
                                     params['edge_encoder']['kernel_l2'],
                                     name='edge_encoder')
 
-        self.node_encoder = MLP(params['node_encoder']['hidden_units'],
-                                params['node_encoder']['dropout'],
-                                params['node_encoder']['batch_norm'],
-                                params['node_encoder']['kernel_l2'],
-                                name='node_encoder')
         self.node_decoder = MLP(params['node_decoder']['hidden_units'],
                                 params['node_decoder']['dropout'],
                                 params['node_decoder']['batch_norm'],
                                 params['node_decoder']['kernel_l2'],
                                 name='node_decoder')
-
-        self.aneal = params['lambda']
-        if self.aneal > 1 or self.aneal < 0:
-            raise ValueError('aneal factor must be within 0 and 1')
 
         edges = fc_matrix(params['nagents'])
         self.node_aggr = NodeAggregator(edges)
@@ -74,21 +65,13 @@ class GraphConv(keras.Model):
         # Edge aggregation. Shape [batch, num_nodes, 1, filters]
         node_msg = self.edge_aggr(edge_msg)
 
-        # Skip connection from node_msg.
-        node_msg_skip = node_msg
-
-        node_msg = self.node_encoder(node_msg, training=training)
-
-        node_msg = (1 - self.aneal) * node_msg_skip + self.aneal * node_msg
-
-        # Skip connection
         node_state = tf.concat([node_states, node_msg], axis=-1)
         node_state = self.node_decoder(node_state, training=training)
 
         return node_state
 
 
-class SwarmNet(keras.Model):
+class MPNN(keras.Model):
     def __init__(self, params):
         super().__init__(name='SwarmNet')
 

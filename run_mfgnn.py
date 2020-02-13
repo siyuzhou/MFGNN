@@ -12,9 +12,10 @@ from gnn.utils import one_hot
 
 
 def eval_base_line(eval_data):
-    time_segs = eval_data[0]
-    return np.mean(np.square(time_segs[:, :-1, :, :] -
-                             time_segs[:, 1:, :, :]))
+    time_series = eval_data[0]
+    print(time_series.shape)
+    return np.mean(np.square(time_series[:, :-1, :, :] -
+                             time_series[:, 1:, :, :]))
 
 
 def main():
@@ -62,7 +63,6 @@ def main():
             else:
                 model.edge_encoder.trainable = True
 
-            model.node_encoder.trainable = True
             model.node_decoder.trainable = False
 
         elif ARGS.train_mode == 2:
@@ -73,7 +73,6 @@ def main():
             else:
                 model.edge_encoder.trainable = False
 
-            model.node_encoder.trainable = False
             model.node_decoder.trainable = True
 
         history = model.fit(input_data, expected_time_segs,
@@ -84,7 +83,7 @@ def main():
     elif ARGS.eval:
         result = model.evaluate(input_data, expected_time_segs, batch_size=ARGS.batch_size)
         # result = MSE
-        baseline = eval_base_line(input_data)
+        baseline = eval_base_line(data)
         print('Baseline:', baseline, '\t| MSE / Baseline:', result / baseline)
 
     elif ARGS.test:

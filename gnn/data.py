@@ -62,14 +62,14 @@ def load_data(data_path, transpose=None, edge=True, prefix='train', size=None, p
 
         return all_data, all_edges
 
-    return all_data
+    return (all_data,)
 
 
 def preprocess_data(data, seg_len, pred_steps, edge_type=None):
     if edge_type > 1:
         time_series, edge_types = data
     else:
-        time_series = data
+        time_series = data[0]
 
     time_steps, nagents, ndims = time_series.shape[1:]
 
