@@ -12,21 +12,13 @@ class GraphConv(keras.Model):
 
         # Whether edge type used for model.
         self.edge_type = params['edge_type']
-        self.skip_zero = 1 if self.edge_type > 1 and params.get('skip_zero', False) else 0
 
-        if self.edge_type > 1:
-            self.edge_encoders = [MLP(params['edge_encoder']['hidden_units'],
-                                      params['edge_encoder']['dropout'],
-                                      params['edge_encoder']['batch_norm'],
-                                      params['edge_encoder']['kernel_l2'],
-                                      name=f'edge_encoder_{i}')
-                                  for i in range(self.skip_zero, self.edge_type)]
-        else:
-            self.edge_encoder = MLP(params['edge_encoder']['hidden_units'],
+        self.edge_encoders = [MLP(params['edge_encoder']['hidden_units'],
                                     params['edge_encoder']['dropout'],
                                     params['edge_encoder']['batch_norm'],
                                     params['edge_encoder']['kernel_l2'],
-                                    name='edge_encoder')
+                                    name=f'edge_encoder_{i}')
+                                for i in range(1, self.edge_type+1)]
 
         self.node_decoder = MLP(params['node_decoder']['hidden_units'],
                                 params['node_decoder']['dropout'],
@@ -43,24 +35,23 @@ class GraphConv(keras.Model):
         node_states, edge_types = inputs
         edge_msg = self.node_aggr(node_states)
 
-        if self.edge_type > 1:
-            encoded_msg_by_type = []
-            for i in range(self.edge_type - self.skip_zero):
-                # mlp_encoder for each edge type.
-                encoded_msg = self.edge_encoders[i](edge_msg, training=training)
+    
+        encoded_msg_by_type = []
+        for i in range(self.edge_type):
+            # mlp_encoder for each edge type.
+            encoded_msg = self.edge_encoders[i](edge_msg, training=training)
 
-                encoded_msg_by_type.append(encoded_msg)
+            encoded_msg_by_type.append(encoded_msg)
 
-            encoded_msg_by_type = tf.concat(encoded_msg_by_type, axis=2)
-            # Shape [batch, num_edges, edge_types, hidden_units]
+        encoded_msg_by_type = tf.concat(encoded_msg_by_type, axis=2)
+        # Shape [batch, num_edges, edge_types, hidden_units]
 
-            edge_msg = tf.reduce_sum(tf.multiply(encoded_msg_by_type,
-                                                 edge_types[:, :, self.skip_zero:, :]),
-                                     axis=2,
-                                     keepdims=True)
-        else:
-            # Shape [batch, num_edges, 1, hidden_units]
-            edge_msg = self.edge_encoder(edge_msg, training=training)
+        edge_msg = tf.reduce_sum(tf.multiply(encoded_msg_by_type,
+                                                edge_types[:, :, 1:, :]), 
+                                                # `1:` skip 0 type, no connection, no message.
+                                    axis=2,
+                                    keepdims=True)
+
 
         # Edge aggregation. Shape [batch, num_nodes, 1, filters]
         node_msg = self.edge_aggr(edge_msg)
@@ -89,16 +80,14 @@ class MPNN(keras.Model):
 
     def build(self, input_shape):
         t = keras.layers.Input(input_shape[0][1:])
-        inputs = [t]
-        if self.graph_conv.edge_type > 1:
-            e = keras.layers.Input(input_shape[1][1:])
-            inputs.append(e)
+        e = keras.layers.Input(input_shape[1][1:])
+        inputs = [t, e]
 
         self.call(inputs)
         self.built = True
         return inputs
 
-    def _pred_next(self, time_segs, edge_types=None, training=False):
+    def _pred_next(self, time_segs, edge_types, training=False):
         condensed_state = self.conv1d(time_segs)
         # condensed_state shape [batch, num_agents, 1, filters]
 
@@ -114,11 +103,8 @@ class MPNN(keras.Model):
         # time_segs shape [batch, time_seg_len, num_agents, ndims]
         # Transpose to [batch, num_agents, time_seg_len,ndims]
         time_segs = inputs[0]
-        if self.graph_conv.edge_type > 1:
-            edge_types = tf.expand_dims(inputs[1], axis=3)
-            # Shape [None, n_edges, n_types, 1]
-        else:
-            edge_types = None
+        edge_types = tf.expand_dims(inputs[1], axis=3)
+        # Shape [None, n_edges, n_types, 1]
 
         extended_time_segs = tf.transpose(time_segs, [0, 2, 1, 3])
 
@@ -141,12 +127,9 @@ class MPNN(keras.Model):
 
         model.compile(optimizer, loss='mse')
 
-        if params['edge_type'] > 1:
-            input_shape = [(None, params['time_seg_len'], params['nagents'], params['ndims']),
-                           (None, params['nagents']*(params['nagents']-1), params['edge_type'])]
-        else:
-            input_shape = [(None, params['time_seg_len'], params['nagents'], params['ndims'])]
-
+        input_shape = [(None, params['time_seg_len'], params['nagents'], params['ndims']),
+                       (None, params['nagents']*(params['nagents']-1), params['edge_type']+1)]
+        
         inputs = model.build(input_shape)
 
         if return_inputs:

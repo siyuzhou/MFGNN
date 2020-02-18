@@ -65,13 +65,11 @@ def load_data(data_path, transpose=None, edge=True, prefix='train', size=None, p
     return (all_data,)
 
 
-def preprocess_data(data, seg_len, pred_steps, edge_type=None):
-    if edge_type > 1:
-        time_series, edge_types = data
-    else:
-        time_series = data[0]
-
+def preprocess_data(data, seg_len, pred_steps, edge_type=1):
+    time_series, edge_types = data
     time_steps, nagents, ndims = time_series.shape[1:]
+
+    edge_label = edge_type + 1 # Accounting for "no connection"
 
     # time_series shape [num_sims, time_steps, nagents, ndims]
     # Stack shape [num_sims, time_steps-seg_len-pred_steps+1, seg_len, nagents, ndims]
@@ -86,14 +84,12 @@ def preprocess_data(data, seg_len, pred_steps, edge_type=None):
     time_segs = time_segs_stack.reshape([-1, seg_len, nagents, ndims])
     expected_time_segs = expected_time_segs_stack.reshape([-1, pred_steps, nagents, ndims])
 
-    if edge_type > 1:
-        edge_types = utils.one_hot(edge_types, edge_type, np.float32)
-        # Shape [instances, n_edges, edge_type]
-        n_edges = edge_types.shape[1]
-        edge_types = np.stack([edge_types for _ in range(time_segs_stack.shape[1])], axis=1)
-        edge_types = np.reshape(edge_types, [-1, n_edges, edge_type])
+    edge_types = utils.one_hot(edge_types, edge_label, np.float32)
+    # Shape [instances, n_edges, edge_type]
+    n_edges = edge_types.shape[1]
+    edge_types = np.stack([edge_types for _ in range(time_segs_stack.shape[1])], axis=1)
+    edge_types = np.reshape(edge_types, [-1, n_edges, edge_label])
 
-        return [time_segs, edge_types], expected_time_segs
+    return [time_segs, edge_types], expected_time_segs
 
-    else:
-        return [time_segs], expected_time_segs
+
