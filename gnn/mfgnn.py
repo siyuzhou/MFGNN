@@ -3,7 +3,6 @@ import tensorflow as tf
 from tensorflow import keras
 
 from .modules import *
-from .utils import fc_matrix
 
 class MFGNN(keras.Model):
     def __init__(self, params):
@@ -21,7 +20,7 @@ class MFGNN(keras.Model):
         self.n_gc_filters = params['gc_filters']
         self.gc_filters = []
         for _ in range(self.n_gc_filters):
-            self.gc_filters.append(GraphConv(params))
+            self.gc_filters.append(GraphConv(params['num_nodes'], params['edge_type'], params))
 
         self.node_decoder = MLP(params['node_decoder']['hidden_units'],
                                 params['node_decoder']['dropout'],
@@ -42,13 +41,13 @@ class MFGNN(keras.Model):
         return inputs
 
     # @tf.function
-    def _pred_next(self, time_segs, edge_types, training=False):
+    def _pred_next(self, time_segs, edges, training=False):
         condensed_state = self.conv1d(time_segs)
-        # condensed_state shape [batch, num_agents, 1, filters]
+        # condensed_state shape [batch, num_nodes, 1, filters]
 
         node_msgs = []
         for graph_conv in self.gc_filters:
-            node_msg = graph_conv(condensed_state, edge_types, training)
+            node_msg = graph_conv(condensed_state, edges, training)
             node_msgs.append(node_msg)
 
         node_msg_sum = tf.reduce_sum(tf.stack(node_msgs, axis=0), axis=0)
@@ -60,17 +59,16 @@ class MFGNN(keras.Model):
         return next_state
 
     def call(self, inputs, training=False):
-        # time_segs shape [batch, time_seg_len, num_agents, ndims]
-        # Transpose to [batch, num_agents, time_seg_len,ndims]
-        time_segs = inputs[0]
-        edge_types = tf.expand_dims(inputs[1], axis=3)
-        # Shape [None, n_edges, n_types, 1]
+        # time_segs shape [batch, time_seg_len, num_nodes, ndims]
+        # edges shape [batch, num_nodes, num_nodes, edge_types], one-hot label along last axis.
+        time_segs, edges = inputs
 
+        # Transposed to [batch, num_nodes, time_seg_len, ndims].
         extended_time_segs = tf.transpose(time_segs, [0, 2, 1, 3])
 
         for i in range(self.pred_steps):
             next_state = self._pred_next(
-                extended_time_segs[:, :, i:, :], edge_types, training=training)
+                extended_time_segs[:, :, i:, :], edges, training=training)
             extended_time_segs = tf.concat([extended_time_segs, next_state], axis=2)
 
         # Transpose back to [batch, time_seg_len+pred_steps, num_agetns, ndims]
@@ -88,7 +86,7 @@ class MFGNN(keras.Model):
         model.compile(optimizer, loss='mse')
 
         input_shape = [(None, params['time_seg_len'], params['num_nodes'], params['ndims']),
-                       (None, params['num_nodes']*(params['num_nodes']-1), params['edge_type']+1)]
+                       (None, params['num_nodes'], params['num_nodes'], params['edge_type']+1)]
 
         inputs = model.build(input_shape)
 

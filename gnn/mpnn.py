@@ -18,7 +18,7 @@ class MPNN(keras.Model):
         else:
             self.conv1d = keras.layers.Lambda(lambda x: x)
 
-        self.graph_conv = GraphConv(params)
+        self.graph_conv = GraphConv(params['num_nodes'], params['edge_type'], params)
         self.dense = keras.layers.Dense(params['ndims'], name='out_layer')
 
     def build(self, input_shape):
@@ -30,11 +30,11 @@ class MPNN(keras.Model):
         self.built = True
         return inputs
 
-    def _pred_next(self, time_segs, edge_types, training=False):
+    def _pred_next(self, time_segs, edges, training=False):
         condensed_state = self.conv1d(time_segs)
         # condensed_state shape [batch, num_agents, 1, filters]
 
-        node_state = self.graph_conv(condensed_state, edge_types, training)
+        node_state = self.graph_conv(condensed_state, edges, training)
 
         # Predicted difference added to the prev state.
         # The last state in each timeseries of the stack.
@@ -43,17 +43,15 @@ class MPNN(keras.Model):
         return next_state
 
     def call(self, inputs, training=False):
-        # time_segs shape [batch, time_seg_len, num_agents, ndims]
-        # Transpose to [batch, num_agents, time_seg_len,ndims]
-        time_segs = inputs[0]
-        edge_types = tf.expand_dims(inputs[1], axis=3)
-        # Shape [None, n_edges, n_types, 1]
+        # time_segs shape [batch, time_seg_len, num_nodes, ndims]
+        # edges shape [batch, num_nodes, num_nodes, edge_types], one-hot label along last axis.
+        time_segs, edges = inputs
 
         extended_time_segs = tf.transpose(time_segs, [0, 2, 1, 3])
 
         for i in range(self.pred_steps):
-            next_state = self._pred_next(
-                extended_time_segs[:, :, i:, :], edge_types, training=training)
+            next_state = self._pred_next(extended_time_segs[:, :, i:, :], edges,
+                                         training=training)
             extended_time_segs = tf.concat([extended_time_segs, next_state], axis=2)
 
         # Transpose back to [batch, time_seg_len+pred_steps, num_agetns, ndims]
@@ -71,7 +69,7 @@ class MPNN(keras.Model):
         model.compile(optimizer, loss='mse')
 
         input_shape = [(None, params['time_seg_len'], params['num_nodes'], params['ndims']),
-                       (None, params['num_nodes']*(params['num_nodes']-1), params['edge_type']+1)]
+                       (None, params['num_nodes'], params['num_nodes'], params['edge_type']+1)]
         
         inputs = model.build(input_shape)
 

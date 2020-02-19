@@ -51,11 +51,6 @@ def load_data(data_path, transpose=None, edge=True, prefix='train', size=None, p
                 edge_data = np.pad(edge_data, [(0, 0), (0, pad_len), (0, pad_len)],
                                    mode='constant', constant_values=0)
 
-            instances, n_agents, _ = edge_data.shape
-            edge_data = np.stack([edge_data[i][np.where(utils.fc_matrix(n_agents))]
-                                  for i in range(instances)], 0)
-            # Shape [instances, n_edges]
-
             all_edges.append(edge_data)
 
         all_edges = np.concatenate(all_edges, axis=0)
@@ -66,7 +61,7 @@ def load_data(data_path, transpose=None, edge=True, prefix='train', size=None, p
 
 
 def preprocess_data(data, seg_len, pred_steps, edge_type=1):
-    time_series, edge_types = data
+    time_series, edges = data
     time_steps, nagents, ndims = time_series.shape[1:]
 
     edge_label = edge_type + 1 # Accounting for "no connection"
@@ -84,12 +79,9 @@ def preprocess_data(data, seg_len, pred_steps, edge_type=1):
     time_segs = time_segs_stack.reshape([-1, seg_len, nagents, ndims])
     expected_time_segs = expected_time_segs_stack.reshape([-1, pred_steps, nagents, ndims])
 
-    edge_types = utils.one_hot(edge_types, edge_label, np.float32)
-    # Shape [instances, n_edges, edge_type]
-    n_edges = edge_types.shape[1]
-    edge_types = np.stack([edge_types for _ in range(time_segs_stack.shape[1])], axis=1)
-    edge_types = np.reshape(edge_types, [-1, n_edges, edge_label])
+    edges_one_hot = utils.one_hot(edges, edge_label, np.float32)
+    edges_one_hot = np.repeat(edges_one_hot, time_segs_stack.shape[1], axis=0)
 
-    return [time_segs, edge_types], expected_time_segs
+    return [time_segs, edges_one_hot], expected_time_segs
 
 
