@@ -57,25 +57,17 @@ def main():
         checkpoint = gnn.utils.save_model(model, ARGS.log_dir)
 
         # Freeze some of the layers according to train mode.
-        if ARGS.train_mode == 1:
-            model.conv1d.trainable = True
-            if model_params['edge_type'] > 1:
-                for edge_encoder in model.edge_encoders:
-                    edge_encoder.trainable = True
-            else:
-                model.edge_encoder.trainable = True
+        # if ARGS.train_mode == 1:
+        #     model.conv1d.trainable = True
+        #     model.graph_conv.edge_encoder = True
 
-            model.node_decoder.trainable = False
+        #     model.graph_conv.node_decoder.trainable = False
 
-        elif ARGS.train_mode == 2:
-            model.conv1d.trainable = False
-            if model_params['edge_type'] > 1:
-                for edge_encoder in model.edge_encoders:
-                    edge_encoder.trainable = False
-            else:
-                model.edge_encoder.trainable = False
+        # elif ARGS.train_mode == 2:
+        #     model.conv1d.trainable = False
+        #     model.graph_conv.edge_encoder.trainable = False
 
-            model.node_decoder.trainable = True
+        #     model.graph_conv.node_decoder.trainable = True
 
         history = model.fit(input_data, expected_time_segs,
                             epochs=ARGS.epochs, batch_size=ARGS.batch_size,
@@ -116,11 +108,11 @@ if __name__ == '__main__':
                         help='batch size')
     parser.add_argument('--train', action='store_true', default=False,
                         help='turn on training')
-    parser.add_argument('--train-mode', type=int, default=0,
-                        help='train mode determines which layers are frozen: '
-                             '0 - all layers are trainable; '
-                             '1 - conv1d layers and edge encoders are trainable; '
-                             '2 - edge encoders and node encoder are trainable.')
+    # parser.add_argument('--train-mode', type=int, default=0,
+    #                     help='train mode determines which layers are frozen: '
+    #                          '0 - all layers are trainable; '
+    #                          '1 - conv1d layers and edge encoders are trainable; '
+    #                          '2 - edge encoders and node encoder are trainable.')
     parser.add_argument('--max-padding', type=int, default=None,
                         help='max pad length to the number of agents dimension')
     parser.add_argument('--eval', action='store_true', default=False,
