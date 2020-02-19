@@ -7,7 +7,7 @@ from .modules import Conv1D, GraphConv
 
 class MPNN(keras.Model):
     def __init__(self, params):
-        super().__init__(name='SwarmNet')
+        super().__init__(name='MPNN')
 
         # NOTE: For the moment assume Conv1D is always applied
         self.pred_steps = params['pred_steps']
