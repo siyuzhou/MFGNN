@@ -33,11 +33,11 @@ def main():
         prefix = 'test'
 
     model_params['edge_type'] = model_params.get('edge_type')
-    # data contains edge_types if `edge=True`.
+    # data contains edges if `edge=True`.
     data = load_data(ARGS.data_dir, ARGS.data_transpose,
                      prefix=prefix, size=ARGS.data_size, padding=ARGS.max_padding)
 
-    # input_data: a list which is [time_segs, edge_types] if `edge_type` > 1, else [time_segs]
+    # input_data: a list which is [time_segs, edges] if `edge_type` > 1, else [time_segs]
     input_data, expected_time_segs = preprocess_data(
         data, seg_len, ARGS.pred_steps, edge_type=model_params['edge_type'])
     print(f"\nData from {ARGS.data_dir} processed.\n")
@@ -55,19 +55,6 @@ def main():
 
     if ARGS.train:
         checkpoint = gnn.utils.save_model(model, ARGS.log_dir)
-
-        # Freeze some of the layers according to train mode.
-        # if ARGS.train_mode == 1:
-        #     model.conv1d.trainable = True
-        #     model.graph_conv.edge_encoder = True
-
-        #     model.graph_conv.node_decoder.trainable = False
-
-        # elif ARGS.train_mode == 2:
-        #     model.conv1d.trainable = False
-        #     model.graph_conv.edge_encoder.trainable = False
-
-        #     model.graph_conv.node_decoder.trainable = True
 
         history = model.fit(input_data, expected_time_segs,
                             epochs=ARGS.epochs, batch_size=ARGS.batch_size,
@@ -108,11 +95,6 @@ if __name__ == '__main__':
                         help='batch size')
     parser.add_argument('--train', action='store_true', default=False,
                         help='turn on training')
-    # parser.add_argument('--train-mode', type=int, default=0,
-    #                     help='train mode determines which layers are frozen: '
-    #                          '0 - all layers are trainable; '
-    #                          '1 - conv1d layers and edge encoders are trainable; '
-    #                          '2 - edge encoders and node encoder are trainable.')
     parser.add_argument('--max-padding', type=int, default=None,
                         help='max pad length to the number of agents dimension')
     parser.add_argument('--eval', action='store_true', default=False,
