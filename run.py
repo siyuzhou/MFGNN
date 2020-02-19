@@ -44,7 +44,7 @@ def main():
 
     nagents, ndims = expected_time_segs.shape[-2:]
 
-    model_params.update({'nagents': nagents, 'ndims': ndims,
+    model_params.update({'num_nodes': nagents, 'ndims': ndims,
                          'pred_steps': ARGS.pred_steps, 'time_seg_len': seg_len})
 
     models = {'MPNN': gnn.MPNN, 'MFGNN': gnn.MFGNN}

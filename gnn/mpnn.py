@@ -2,64 +2,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 
-from .modules import *
-from .utils import fc_matrix
-
-
-class GraphConv(keras.Model):
-    def __init__(self, params):
-        super().__init__(name='GraphConv')
-
-        # Whether edge type used for model.
-        self.edge_type = params['edge_type']
-
-        self.edge_encoders = [MLP(params['edge_encoder']['hidden_units'],
-                                    params['edge_encoder']['dropout'],
-                                    params['edge_encoder']['batch_norm'],
-                                    params['edge_encoder']['kernel_l2'],
-                                    name=f'edge_encoder_{i}')
-                                for i in range(1, self.edge_type+1)]
-
-        self.node_decoder = MLP(params['node_decoder']['hidden_units'],
-                                params['node_decoder']['dropout'],
-                                params['node_decoder']['batch_norm'],
-                                params['node_decoder']['kernel_l2'],
-                                name='node_decoder')
-
-        edges = fc_matrix(params['nagents'])
-        self.node_aggr = NodeAggregator(edges)
-        self.edge_aggr = EdgeAggregator(edges)
-
-    def call(self, inputs, training=False):
-        # Form edges. Shape [batch, num_edges, 1, filters]
-        node_states, edge_types = inputs
-        edge_msg = self.node_aggr(node_states)
-
-    
-        encoded_msg_by_type = []
-        for i in range(self.edge_type):
-            # mlp_encoder for each edge type.
-            encoded_msg = self.edge_encoders[i](edge_msg, training=training)
-
-            encoded_msg_by_type.append(encoded_msg)
-
-        encoded_msg_by_type = tf.concat(encoded_msg_by_type, axis=2)
-        # Shape [batch, num_edges, edge_types, hidden_units]
-
-        edge_msg = tf.reduce_sum(tf.multiply(encoded_msg_by_type,
-                                                edge_types[:, :, 1:, :]), 
-                                                # `1:` skip 0 type, no connection, no message.
-                                    axis=2,
-                                    keepdims=True)
-
-
-        # Edge aggregation. Shape [batch, num_nodes, 1, filters]
-        node_msg = self.edge_aggr(edge_msg)
-
-        node_state = tf.concat([node_states, node_msg], axis=-1)
-        node_state = self.node_decoder(node_state, training=training)
-
-        return node_state
+from .modules import Conv1D, GraphConv
 
 
 class MPNN(keras.Model):
@@ -91,7 +34,7 @@ class MPNN(keras.Model):
         condensed_state = self.conv1d(time_segs)
         # condensed_state shape [batch, num_agents, 1, filters]
 
-        node_state = self.graph_conv([condensed_state, edge_types], training)
+        node_state = self.graph_conv(condensed_state, edge_types, training)
 
         # Predicted difference added to the prev state.
         # The last state in each timeseries of the stack.
@@ -127,8 +70,8 @@ class MPNN(keras.Model):
 
         model.compile(optimizer, loss='mse')
 
-        input_shape = [(None, params['time_seg_len'], params['nagents'], params['ndims']),
-                       (None, params['nagents']*(params['nagents']-1), params['edge_type']+1)]
+        input_shape = [(None, params['time_seg_len'], params['num_nodes'], params['ndims']),
+                       (None, params['num_nodes']*(params['num_nodes']-1), params['edge_type']+1)]
         
         inputs = model.build(input_shape)
 
