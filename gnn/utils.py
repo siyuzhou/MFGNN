@@ -22,14 +22,14 @@ def stack_time_series(time_series, seg_len, axis=2):
 
 
 def load_model(model, log_dir):
-    checkpoint = os.path.join(log_dir, 'weights.tf')
+    checkpoint = os.path.join(log_dir, 'weights.h5')
     if os.path.exists(checkpoint):
         model.load_weights(checkpoint)
 
 
 def save_model(model, log_dir):
     os.makedirs(log_dir, exist_ok=True)
-    checkpoint = os.path.join(log_dir, 'weights.tf')
+    checkpoint = os.path.join(log_dir, 'weights.h5')
 
     model.save_weights(checkpoint)
 

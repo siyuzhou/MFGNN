@@ -75,8 +75,8 @@ class HardCodedMFGNN(keras.Model):
         else:
             self.conv1d = keras.layers.Lambda(lambda x: x)
 
-        self.gc_filters = [GraphConv(params['num_nodes'], params['edge_type'], params)]
-        self.gc_filters.append(GraphAVGConv(params['num_nodes'], params['edge_type'], params))
+        self.gc_filters = [GraphConv(params['num_nodes'], params['edge_type'], params, name='GraphConv')]
+        self.gc_filters.append(GraphAVGConv(params['num_nodes'], params['edge_type'], params, name='GraphAVGConv'))
         
         self.node_decoder = MLP(params['node_decoder']['hidden_units'],
                                 params['node_decoder']['dropout'],
