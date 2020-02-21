@@ -146,7 +146,7 @@ class EdgeEncoder(keras.layers.Layer):
         # `node_msgs` shape [batch, num_nodes*num_nodes, units]
         # `edges` shape [batch, num_nodes, num_nodes, num_edge_label]
         num_nodes, num_edge_label = edges.shape[2:]
-        edge_types = tf.expand_dims(tf.reshape(edges, [-1, num_nodes*num_nodes, num_edge_label]), axis=3)
+        edge_types = tf.reshape(edges, [-1, num_nodes*num_nodes, num_edge_label, 1])
         # Shape [None, n_edges, n_types, 1]
         
         encoded_msgs_by_type = []
