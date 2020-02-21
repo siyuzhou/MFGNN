@@ -10,7 +10,6 @@ from gnn.data import load_data, preprocess_data
 
 def eval_base_line(eval_data):
     time_series = eval_data[0]
-    print(time_series.shape)
     return np.mean(np.square(time_series[:, :-1, :, :] -
                              time_series[:, 1:, :, :]))
 

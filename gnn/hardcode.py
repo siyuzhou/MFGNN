@@ -30,8 +30,8 @@ class EdgeAggregatorAVG(keras.layers.Layer):
 
 
 class GraphAVGConv(keras.layers.Layer):
-    def __init__(self, graph_size, edge_type, params):
-        super().__init__(name='GraphConv')
+    def __init__(self, graph_size, edge_type, params, name=None):
+        super().__init__(name=name)
 
         fc = np.ones((graph_size, graph_size))
         self.node_prop = NodePropagator(fc)
