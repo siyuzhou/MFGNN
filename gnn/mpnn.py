@@ -18,7 +18,8 @@ class MPNN(keras.Model):
         else:
             self.conv1d = keras.layers.Lambda(lambda x: x)
 
-        self.graph_conv = GraphConv(params['num_nodes'], params['edge_type'], params)
+        self.graph_conv = GraphConv(params['num_nodes'], params['edge_type'],
+                                    params, name='GraphConv')
         self.dense = keras.layers.Dense(params['ndims'], name='out_layer')
 
     def build(self, input_shape):

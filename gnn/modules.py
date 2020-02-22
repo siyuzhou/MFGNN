@@ -143,7 +143,7 @@ class EdgeEncoder(keras.layers.Layer):
                               for i in range(1, self.edge_type+1)]
 
     def call(self, node_msgs, edges, training=False):
-        # `node_msgs` shape [batch, num_nodes*num_nodes, units]
+        # `node_msgs` shape [batch, num_nodes*num_nodes, 1, units]
         # `edges` shape [batch, num_nodes, num_nodes, num_edge_label]
         num_nodes, num_edge_label = edges.shape[2:]
         edge_types = tf.reshape(edges, [-1, num_nodes*num_nodes, num_edge_label, 1])
@@ -157,7 +157,7 @@ class EdgeEncoder(keras.layers.Layer):
             encoded_msgs_by_type.append(encoded_msgs)
 
         encoded_msgs_by_type = tf.concat(encoded_msgs_by_type, axis=2)
-        # Shape [batch, num_edges, edge_types, hidden_units]
+        # Shape [batch, num_edges, edge_types, units]
 
         # Only encoded message of the type same as the edge type gets retaind.
         # Force skip 0 type, 0 means no connection, no message.
@@ -167,8 +167,8 @@ class EdgeEncoder(keras.layers.Layer):
 
 
 class GraphConv(keras.layers.Layer):
-    def __init__(self, graph_size, edge_type, params):
-        super().__init__(name='GraphConv')
+    def __init__(self, graph_size, edge_type, params, name=None):
+        super().__init__(name=name)
 
         fc = np.ones((graph_size, graph_size))
         self.node_prop = NodePropagator(fc)

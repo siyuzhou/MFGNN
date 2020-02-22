@@ -19,8 +19,9 @@ class MFGNN(keras.Model):
 
         self.n_gc_filters = params['gc_filters']
         self.gc_filters = []
-        for _ in range(self.n_gc_filters):
-            self.gc_filters.append(GraphConv(params['num_nodes'], params['edge_type'], params))
+        for i in range(self.n_gc_filters):
+            self.gc_filters.append(GraphConv(params['num_nodes'], params['edge_type'], params,
+                                             name=f'GraphFilter_{i}'))
 
         self.node_decoder = MLP(params['node_decoder']['hidden_units'],
                                 params['node_decoder']['dropout'],
