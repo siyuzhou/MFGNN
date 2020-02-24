@@ -29,8 +29,6 @@ def main():
     elif ARGS.test:
         prefix = 'test'
 
-    model_params['edge_type'] = model_params.get('edge_type')
-    # data contains edges if `edge=True`.
     data = load_data(ARGS.data_dir, ARGS.data_transpose,
                      prefix=prefix, size=ARGS.data_size, padding=ARGS.max_padding)
 
