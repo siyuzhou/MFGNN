@@ -2,13 +2,10 @@ import os
 import argparse
 import json
 
-import tensorflow as tf
-from tensorflow import keras
 import numpy as np
 
 import gnn
 from gnn.data import load_data, preprocess_data
-from gnn.utils import one_hot
 
 
 def eval_base_line(eval_data):
