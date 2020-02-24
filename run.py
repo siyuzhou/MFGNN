@@ -34,7 +34,6 @@ def main():
     data = load_data(ARGS.data_dir, ARGS.data_transpose,
                      prefix=prefix, size=ARGS.data_size, padding=ARGS.max_padding)
 
-    # input_data: a list which is [time_segs, edges] if `edge_type` > 1, else [time_segs]
     input_data, expected_time_segs = preprocess_data(
         data, seg_len, ARGS.pred_steps, edge_type=model_params['edge_type'])
     print(f"\nData from {ARGS.data_dir} processed.\n")
