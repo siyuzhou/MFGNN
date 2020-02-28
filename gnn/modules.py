@@ -1,174 +1,134 @@
-import tensorflow as tf
-from tensorflow import keras
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
+from .utils import one_hot
 
 
-class MLP(keras.layers.Layer):
-    def __init__(self, units, dropout=0., batch_norm=False, kernel_l2=0., name=None):
+class MLP(nn.Module):
+    def __init__(self, input_size, units, activation=None):
         if not units:
             raise ValueError("'units' must not be empty")
 
-        super().__init__(name=name)
-        self.hidden_layers = []
-        self.dropout_layers = []
+        super().__init__()
+        self.hidden_layers = nn.ModuleList([nn.Linear(uin, uout)
+                                            for uin, uout in zip([input_size]+units[:-1], units)])
 
-        for i, unit in enumerate(units[:-1]):
-            name = f'hidden{i}'
-            layer = keras.layers.Dense(unit, activation='relu',
-                                       kernel_regularizer=keras.regularizers.l2(kernel_l2),
-                                       name=name)
-            self.hidden_layers.append(name)
-            setattr(self, name, layer)
-
-            dropout_name = f'dropout{i}'
-            dropout_layer = keras.layers.Dropout(dropout)
-            self.dropout_layers.append(dropout_name)
-            setattr(self, dropout_name, dropout_layer)
-
-        self.out_layer = keras.layers.Dense(units[-1], activation='relu', name='out_layer')
-
-        if batch_norm:
-            self.batch_norm = keras.layers.BatchNormalization()
-        else:
-            self.batch_norm = None
-
-    def call(self, x, training=False):
-        for name, dropout_name in zip(self.hidden_layers, self.dropout_layers):
-            layer = getattr(self, name)
-            dropout_layer = getattr(self, dropout_name)
-
+    def forward(self, x):
+        for layer in self.hidden_layers:
             x = layer(x)
-            x = dropout_layer(x, training=training)
+            x = F.relu(x)
 
-        x = self.out_layer(x)
-        if self.batch_norm:
-            return self.batch_norm(x, training=training)
         return x
 
 
-class Conv1D(keras.layers.Layer):
+class Conv1D(nn.Module):
     """
-    Condense and abstract the time segments.
+    Apply 1D convolution along the second last dimension.
+    Input shape: (..., l, d)
+    Output shape: (..., l', f)
     """
-
-    def __init__(self, filters, name=None):
+    def __init__(self, input_size, filters):
         if not filters:
             raise ValueError("'filters' must not be empty")
+        super().__init__()
 
-        super().__init__(name=name)
-        # time segment length before being reduced to 1 by Conv1D
         self.seg_len = 2 * len(filters) + 1
 
-        self.conv1d_layers = []
-        for i, channels in enumerate(filters):
-            name = f'conv{i}'
-            layer = keras.layers.TimeDistributed(
-                keras.layers.Conv1D(channels, 3, activation='relu', name=name))
-            self.conv1d_layers.append(name)
-            setattr(self, name, layer)
+        self.conv1ds = nn.ModuleList([nn.Conv1d(fin, fout, 3)
+                                      for fin, fout in zip([3]+filters[:-1], filters)])
+         
+    def forward(self, x):
+        shape = x.shape
+        # Conv1d applies to input with shape (N, C, L) and outputs (N, C', L').
+        # `x` is to be reshaped and transposed.
+        x_3d = x.view(-1, shape[-2], shape[-1]).transpose(-1, -2)
 
-        self.channels = channels
+        for conv in self.conv1ds:
+            x_3d = conv(x_3d)
+            x_3d = F.relu(x_3d)
 
-    def call(self, time_segs):
-        # Node state encoder with 1D convolution along timesteps and across ndims as channels.
-        encoded_state = time_segs
-        for name in self.conv1d_layers:
-            conv = getattr(self, name)
-            encoded_state = conv(encoded_state)
+        return x_3d.view(shape[:-2] + x_3d.shape[-2:]).transpose(-1, -2)
+        
 
-        return encoded_state
-
- 
-class NodePropagator(keras.layers.Layer):
-    """
-    Pass message between every pair of nodes.
-    """
-
+class NodePropagator(nn.Module):
     def __init__(self, edges):
         super().__init__()
 
-        # Construct full connection matrix, mark source node and target node for each connection. 
-        # `self._edge_sources` and `self._edge_targets` with size [num_edges, num_nodes]
         edge_sources, edge_targets = np.where(edges)
-        self._edge_sources = tf.one_hot(edge_sources, len(edges))
-        self._edge_targets = tf.one_hot(edge_targets, len(edges))
+        self._edge_sources = torch.tensor(one_hot(edge_sources, len(edges)), dtype=torch.float32)
+        self._edge_targets = torch.tensor(one_hot(edge_targets, len(edges)), dtype=torch.float32)
 
-    def call(self, node_states):
-        # node_msg shape [batch, num_nodes, 1, out_units].
-        msg_from_source = tf.transpose(tf.tensordot(node_states, self._edge_sources, axes=[[1], [1]]),
-                                       perm=[0, 3, 1, 2])
-        msg_from_target = tf.transpose(tf.tensordot(node_states, self._edge_targets, axes=[[1], [1]]),
-                                       perm=[0, 3, 1, 2])
-        # msg_from_source and msg_from_target in shape [batch, num_edges, 1, out_units]
-        node_msgs = tf.concat([msg_from_source, msg_from_target], axis=-1)
+    def forward(self, node_states):
+        # node_states shape [batch, 1, num_nodes, units]
+        msg_from_source = torch.matmul(self._edge_sources, node_states)
+        msg_from_target = torch.matmul(self._edge_targets, node_states)
+        
+        node_msgs = torch.cat([msg_from_source, msg_from_target], -1)
+        # Shape [batch, 1, num_edges, 2*units]
+
         return node_msgs
 
+    def _apply(self, fn):
+        super()._apply(fn)
+        self._edge_sources = fn(self._edge_sources)
+        self._edge_targets = fn(self._edge_targets)
 
-class EdgeAggregator(keras.layers.Layer):
-    """
-    Sum up messages from incoming edges to the node.
-    """
+        return self
 
+
+class EdgeAggregator(nn.Module):
     def __init__(self, edges):
         super().__init__()
 
-        # `edge_sources` and `edge_targets` in shape [num_edges, num_nodes].
         edge_targets = np.where(edges)[1]
-        self._edge_targets = tf.one_hot(edge_targets, len(edges))
+        self._edge_targets = torch.tensor(one_hot(edge_targets, len(edges)), dtype=torch.float32)
 
-    def call(self, edge_msg):
-        # edge_msg shape [batch, num_edges, edge_type, out_units]
-        edge_msg_sum = tf.transpose(tf.tensordot(edge_msg, self._edge_targets, axes=[[1], [0]]),
-                                    perm=[0, 3, 1, 2])  # Shape [batch, num_nodes, edge_type, out_units].
-        # Add messsages of all edge types.
-        edge_msg_sum = tf.reduce_sum(edge_msg_sum, axis=2, keepdims=True)
-        return edge_msg_sum
+    def forward(self, edge_msgs):
+        # edgemsgs shape [batch, edge_type, num_edges, units]
+        edge_msgs_sum = torch.matmul(self._edge_targets.t(), edge_msgs)
+        # Add messages of all edge types.
+        edge_msgs_sum = torch.sum(edge_msgs_sum, dim=1, keepdim=True)
+        return edge_msgs_sum
+
+    def _apply(self, fn):
+        super()._apply(fn)
+        self._edge_targets = fn(self._edge_targets)
+        return self
 
 
-class EdgeEncoder(keras.layers.Layer):
-    """
-    Propagate messages to edge from the two nodes connected via edge encoders.
-    """
-
-    def __init__(self, edge_type, encoder_params):
+class EdgeEncoder(nn.Module):
+    def __init__(self, num_edge_types, encoder_params):
         super().__init__()
-        
-        self.edge_type = edge_type
 
-        self.edge_encoders = [MLP(encoder_params['hidden_units'],
-                                  encoder_params['dropout'],
-                                  encoder_params['batch_norm'],
-                                  encoder_params['kernel_l2'],
-                                  name=f'edge_encoder_{i}')
-                              for i in range(1, self.edge_type+1)]
+        self.edge_type = num_edge_types
 
-    def call(self, node_msgs, edges, training=False):
-        # `node_msgs` shape [batch, num_nodes*num_nodes, 1, units]
+        self.encoders = nn.ModuleList([MLP(encoder_params['input_size'],
+                                           encoder_params['hidden_units'])
+                                       for _ in range(1, self.edge_type+1)])
+
+    def forward(self, node_msgs, edges):
+        # `node_msgs` shape [batch, 1, num_edges, units]
         # `edges` shape [batch, num_nodes, num_nodes, num_edge_label]
         num_nodes, num_edge_label = edges.shape[2:]
-        edge_types = tf.reshape(edges, [-1, num_nodes*num_nodes, num_edge_label, 1])
-        # Shape [None, n_edges, n_types, 1]
+        edge_types = edges.view(-1, num_nodes*num_nodes, num_edge_label, 1).transpose(1, 2)
+        # Shape [batch, num_edge_label, num_edges, 1]
+
+        encoded_msgs_by_type = [encoder(node_msgs)
+                                for encoder in self.encoders]
         
-        encoded_msgs_by_type = []
-        for i in range(self.edge_type):
-            # mlp_encoder for each edge type.
-            encoded_msgs = self.edge_encoders[i](node_msgs, training=training)
-
-            encoded_msgs_by_type.append(encoded_msgs)
-
-        encoded_msgs_by_type = tf.concat(encoded_msgs_by_type, axis=2)
-        # Shape [batch, num_edges, edge_types, units]
+        encoded_msgs_by_type = torch.cat(encoded_msgs_by_type, 1)
+        # Shape [batch, edge_type, num_edges, units]
 
         # Only encoded message of the type same as the edge type gets retaind.
         # Force skip 0 type, 0 means no connection, no message.
-        edge_msgs = tf.multiply(encoded_msgs_by_type, edge_types[:, :, 1:, :])
-        
+        edge_msgs = encoded_msgs_by_type * edge_types[:, 1:, :, :]
         return edge_msgs
+        
 
-
-class GraphConv(keras.layers.Layer):
-    def __init__(self, graph_size, edge_type, params, name=None):
-        super().__init__(name=name)
+class GraphConv(nn.Module):
+    def __init__(self, graph_size, edge_type, params):
+        super().__init__()
 
         fc = np.ones((graph_size, graph_size))
         self.node_prop = NodePropagator(fc)
@@ -176,23 +136,17 @@ class GraphConv(keras.layers.Layer):
 
         self.edge_encoder = EdgeEncoder(edge_type, params['edge_encoder'])
 
-        self.node_decoder = MLP(params['node_decoder']['hidden_units'],
-                                params['node_decoder']['dropout'],
-                                params['node_decoder']['batch_norm'],
-                                params['node_decoder']['kernel_l2'],
-                                name='node_decoder')
+        self.node_decoder = MLP(params['node_decoder']['input_size'],
+                                params['node_decoder']['hidden_units'])
 
-    def call(self, node_states, edges, training=False):
-        # Propagate node states.
+    def forward(self, node_states, edges):
         node_msgs = self.node_prop(node_states)
 
-        # Form edges. Shape [batch, num_edges, edge_type, units]
-        edge_msgs = self.edge_encoder(node_msgs, edges, training)
+        edge_msgs = self.edge_encoder(node_msgs, edges)
 
-        # Edge aggregation. Shape [batch, num_nodes, 1, units]
         edge_msgs_aggr = self.edge_aggr(edge_msgs)
 
-        # Update node_states
-        node_states = self.node_decoder(tf.concat([node_states, edge_msgs_aggr], axis=-1), training=training)
+        node_states = self.node_decoder(torch.cat([node_states, edge_msgs_aggr], -1))
 
         return node_states
+        

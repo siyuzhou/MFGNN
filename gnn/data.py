@@ -1,6 +1,7 @@
 import os
 import glob
 import numpy as np
+import torch
 from . import utils
 
 
@@ -76,11 +77,11 @@ def preprocess_data(data, seg_len, pred_steps, edge_type=1):
     assert (time_segs_stack.shape[1] == expected_time_segs_stack.shape[1]
             == time_steps - seg_len - pred_steps + 1)
 
-    time_segs = time_segs_stack.reshape([-1, seg_len, nagents, ndims])
-    expected_time_segs = expected_time_segs_stack.reshape([-1, pred_steps, nagents, ndims])
+    time_segs = torch.from_numpy(time_segs_stack.reshape([-1, seg_len, nagents, ndims]))
+    expected_time_segs = torch.from_numpy(expected_time_segs_stack.reshape([-1, pred_steps, nagents, ndims]))
 
     edges_one_hot = utils.one_hot(edges, edge_label, np.float32)
-    edges_one_hot = np.repeat(edges_one_hot, time_segs_stack.shape[1], axis=0)
+    edges_one_hot = torch.from_numpy(np.repeat(edges_one_hot, time_segs_stack.shape[1], axis=0))
 
     return [time_segs, edges_one_hot], expected_time_segs
 
