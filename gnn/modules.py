@@ -94,17 +94,17 @@ class NodePropagator(keras.layers.Layer):
         self._edge_targets = tf.one_hot(edge_targets, len(edges))
 
     def call(self, node_states):
-        # node_msg shape [batch, num_nodes, 1, out_units].
+        # node_msg shape [batch, num_nodes, out_units].
         msg_from_source = tf.transpose(tf.tensordot(node_states, self._edge_sources, axes=[[1], [1]]),
-                                       perm=[0, 3, 1, 2])
+                                       perm=[0, 2, 1])
         msg_from_target = tf.transpose(tf.tensordot(node_states, self._edge_targets, axes=[[1], [1]]),
-                                       perm=[0, 3, 1, 2])
-        # msg_from_source and msg_from_target in shape [batch, num_edges, 1, out_units]
+                                       perm=[0, 2, 1])
+        # msg_from_source and msg_from_target in shape [batch, num_edges, out_units]
         node_msgs = tf.concat([msg_from_source, msg_from_target], axis=-1)
         return node_msgs
 
 
-class EdgeAggregator(keras.layers.Layer):
+class EdgeSumAggregator(keras.layers.Layer):
     """
     Sum up messages from incoming edges to the node.
     """
@@ -118,10 +118,14 @@ class EdgeAggregator(keras.layers.Layer):
 
     def call(self, edge_msg):
         # edge_msg shape [batch, num_edges, edge_type, out_units]
-        edge_msg_sum = tf.transpose(tf.tensordot(edge_msg, self._edge_targets, axes=[[1], [0]]),
-                                    perm=[0, 3, 1, 2])  # Shape [batch, num_nodes, edge_type, out_units].
-        # Add messsages of all edge types.
-        edge_msg_sum = tf.reduce_sum(edge_msg_sum, axis=2, keepdims=True)
+
+        # Add messsages of all edge types. Shape becomes [batch, num_eddges, out_units]
+        edge_msg_sum = tf.reduce_sum(edge_msg, axis=2)
+
+        # Sum edge msgs in each neighborhood.
+        edge_msg_sum = tf.transpose(tf.tensordot(edge_msg_sum, self._edge_targets, axes=[[1], [0]]),
+                                    perm=[0, 2, 1])  # Shape [batch, num_nodes, out_units].
+        
         return edge_msg_sum
 
 
@@ -143,7 +147,7 @@ class EdgeEncoder(keras.layers.Layer):
                               for i in range(1, self.edge_type+1)]
 
     def call(self, node_msgs, edges, training=False):
-        # `node_msgs` shape [batch, num_nodes*num_nodes, 1, units]
+        # `node_msgs` shape [batch, num_nodes*num_nodes, units]
         # `edges` shape [batch, num_nodes, num_nodes, num_edge_label]
         num_nodes, num_edge_label = edges.shape[2:]
         edge_types = tf.reshape(edges, [-1, num_nodes*num_nodes, num_edge_label, 1])
@@ -156,7 +160,7 @@ class EdgeEncoder(keras.layers.Layer):
 
             encoded_msgs_by_type.append(encoded_msgs)
 
-        encoded_msgs_by_type = tf.concat(encoded_msgs_by_type, axis=2)
+        encoded_msgs_by_type = tf.stack(encoded_msgs_by_type, axis=2)
         # Shape [batch, num_edges, edge_types, units]
 
         # Only encoded message of the type same as the edge type gets retaind.
@@ -172,7 +176,7 @@ class GraphConv(keras.layers.Layer):
 
         fc = np.ones((graph_size, graph_size))
         self.node_prop = NodePropagator(fc)
-        self.edge_aggr = EdgeAggregator(fc)
+        self.edge_aggr = EdgeSumAggregator(fc)
 
         self.edge_encoder = EdgeEncoder(edge_type, params['edge_encoder'])
 
@@ -189,7 +193,7 @@ class GraphConv(keras.layers.Layer):
         # Form edges. Shape [batch, num_edges, edge_type, units]
         edge_msgs = self.edge_encoder(node_msgs, edges, training)
 
-        # Edge aggregation. Shape [batch, num_nodes, 1, units]
+        # Edge aggregation. Shape [batch, num_nodes, units]
         edge_msgs_aggr = self.edge_aggr(edge_msgs)
 
         # Update node_states

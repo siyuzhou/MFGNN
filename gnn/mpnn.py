@@ -33,13 +33,15 @@ class MPNN(keras.Model):
 
     def _pred_next(self, time_segs, edges, training=False):
         condensed_state = self.conv1d(time_segs)
-        # condensed_state shape [batch, num_agents, 1, filters]
+        # condensed_state shape [batch, num_nodes, 1, filters]
+        condensed_state = tf.squeeze(condensed_state, axis=2)
+        # condensed_state shape [batch, num_nodes, filters]
 
         node_state = self.graph_conv(condensed_state, edges, training)
 
         # Predicted difference added to the prev state.
         # The last state in each timeseries of the stack.
-        prev_state = time_segs[:, :, -1:, :]
+        prev_state = time_segs[:, :, -1, :]
         next_state = prev_state + self.dense(node_state)
         return next_state
 
@@ -53,6 +55,7 @@ class MPNN(keras.Model):
         for i in range(self.pred_steps):
             next_state = self._pred_next(extended_time_segs[:, :, i:, :], edges,
                                          training=training)
+            next_state = tf.expand_dims(next_state, axis=2)
             extended_time_segs = tf.concat([extended_time_segs, next_state], axis=2)
 
         # Transpose back to [batch, time_seg_len+pred_steps, num_agetns, ndims]
