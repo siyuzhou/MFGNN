@@ -18,11 +18,7 @@ class GraphConv(tf.keras.layers.Layer):
 
         self.edge_encoder = EdgeEncoder(edge_type, params['edge_encoder'])
 
-        self.node_decoder = MLP(params['node_decoder']['hidden_units'],
-                                params['node_decoder']['dropout'],
-                                params['node_decoder']['batch_norm'],
-                                params['node_decoder']['kernel_l2'],
-                                name='node_decoder')
+        self.node_updater = NodeUpdater(params['node_updater'])
 
     def call(self, node_states, edges, training=False):
         # Propagate node states.
@@ -35,7 +31,6 @@ class GraphConv(tf.keras.layers.Layer):
         edge_msgs_aggr = self.edge_aggr(edge_msgs, node_states, edges)
 
         # Update node_states
-        node_states = self.node_decoder(
-            tf.concat([node_states, edge_msgs_aggr], axis=-1), training=training)
+        node_states = self.node_updater(node_states, edge_msgs_aggr, training)
 
         return node_states

@@ -19,7 +19,6 @@ class MPNN(keras.Model):
 
         self.graph_conv = GraphConv(params['num_nodes'], params['edge_type'],
                                     params, name='GraphConv')
-        self.dense = keras.layers.Dense(params['ndims'], name='out_layer')
 
     def build(self, input_shape):
         t = keras.layers.Input(input_shape[0][1:])
@@ -41,7 +40,7 @@ class MPNN(keras.Model):
         # Predicted difference added to the prev state.
         # The last state in each timeseries of the stack.
         prev_state = time_segs[:, :, -1, :]
-        next_state = prev_state + self.dense(node_state)
+        next_state = prev_state + node_state
         return next_state
 
     def call(self, inputs, training=False):

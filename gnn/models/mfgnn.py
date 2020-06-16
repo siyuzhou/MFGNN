@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow import keras
 
-from ..components import MLP
+from ..components import MLP, NodeUpdater
 from ..convolutions import Conv1D, GraphConv
 
 
@@ -24,13 +24,8 @@ class MFGNN(keras.Model):
             self.gc_filters.append(GraphConv(params['num_nodes'], params['edge_type'], params,
                                              name=f'GraphFilter_{i}'))
 
-        self.node_decoder = MLP(params['node_decoder']['hidden_units'],
-                                params['node_decoder']['dropout'],
-                                params['node_decoder']['batch_norm'],
-                                params['node_decoder']['kernel_l2'],
-                                name='node_decoder')
-
-        self.dense = keras.layers.Dense(params['ndims'], name='out_layer')
+        self.node_updater = NodeUpdater(params['node_updater'],
+                                        name='node_updater')
 
     def build(self, input_shape):
         t = keras.layers.Input(input_shape[0][1:])
@@ -53,11 +48,11 @@ class MFGNN(keras.Model):
             node_msgs.append(node_msg)
 
         node_msg_sum = tf.reduce_sum(tf.stack(node_msgs, axis=0), axis=0)
-        node_state = self.node_decoder(tf.concat([condensed_state, node_msg_sum], axis=-1))
+        node_state = self.node_updater(node_state, node_msg_sum, training)
         # Predicted difference added to the prev state.
         # The last state in each timeseries of the stack.
         prev_state = time_segs[:, :, -1:, :]
-        next_state = prev_state + self.dense(node_state)
+        next_state = prev_state + node_state
         return next_state
 
     def call(self, inputs, training=False):
