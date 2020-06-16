@@ -78,20 +78,11 @@ class Conv1D(keras.layers.Layer):
 
         return encoded_state
 
- 
+
 class NodePropagator(keras.layers.Layer):
     """
     Pass message between every pair of nodes.
     """
-
-    # def __init__(self):
-    #     super().__init__()
-
-        # Construct full connection matrix, mark source node and target node for each connection. 
-        # `self._edge_sources` and `self._edge_targets` with size [num_edges, num_nodes]
-        # edge_sources, edge_targets = np.where(np.ones((graph_size, graph_size)))
-        # self._edge_sources = tf.one_hot(edge_sources, len(edges))
-        # self._edge_targets = tf.one_hot(edge_targets, len(edges))
 
     def call(self, node_states):
         # node_states shape [batch, num_nodes, out_units].
@@ -105,7 +96,7 @@ class NodePropagator(keras.layers.Layer):
         #                                perm=[0, 2, 1])
         # msg_from_source and msg_from_target in shape [batch, num_nodes, num_nodes, out_units]
         node_msgs = tf.concat([msg_from_source, msg_from_target], axis=-1)
-        
+
         return node_msgs
 
 
@@ -114,23 +105,12 @@ class EdgeSumAggregator(keras.layers.Layer):
     Sum up messages from incoming edges to the node.
     """
 
-    # def __init__(self):
-    #     super().__init__()
-
-        # `edge_sources` and `edge_targets` in shape [num_edges, num_nodes].
-        # edge_targets = np.where(np.ones((graph_size, graph_size)))[1]
-        # self._edge_targets = tf.one_hot(edge_targets, len(edges))
-
     def call(self, edge_msgs, node_states, edges):
         # edge_msg shape [batch, num_nodes, num_nodes, edge_type, out_units]
 
-        # Add messsages of all edge types. Shape becomes [batch, num_nodes, out_units]
+        # Sum messsages of all edge types. Shape becomes [batch, num_nodes, out_units]
         edge_msg_sum = tf.reduce_sum(edge_msgs, axis=[1, 3])
 
-        # Sum edge msgs in each neighborhood.
-        # edge_msg_sum = tf.transpose(tf.tensordot(edge_msg_sum, self._edge_targets, axes=[[1], [0]]),
-        #                             perm=[0, 2, 1])  # Shape [batch, num_nodes, out_units].
-        
         return edge_msg_sum
 
 
@@ -144,7 +124,7 @@ class EdgeAttentionAggregator(keras.layers.Layer):
     def call(self, edge_msgs, node_states, edges):
         # `edge_msg` shape [batch, num_nodes, num_nodes, edge_type, out_units]
         # `node_states` shape [batch, num_nodes, out_units].
-        # `edges` shape [batch, num_nodes, num_nodes, num_edge_label] 
+        # `edges` shape [batch, num_nodes, num_nodes, num_edge_label]
         num_nodes, edge_type = edge_msgs.shape[2:4]
         node_states = tf.expand_dims(tf.expand_dims(node_states, 1), 3)
         # New shape [batch, 1, num_nodes, 1, out_units]
@@ -170,7 +150,7 @@ class EdgeEncoder(keras.layers.Layer):
 
     def __init__(self, edge_type, encoder_params):
         super().__init__()
-        
+
         self.edge_type = edge_type
 
         self.edge_encoders = [MLP(encoder_params['hidden_units'],
@@ -183,11 +163,10 @@ class EdgeEncoder(keras.layers.Layer):
     def call(self, node_msgs, edges, training=False):
         # `node_msgs` shape [batch, num_nodes*num_nodes, units]
         # `edges` shape [batch, num_nodes, num_nodes, num_edge_label]
-        num_nodes, num_edge_label = edges.shape[2:]
         edge_types = tf.expand_dims(edges, axis=-1)
         # Shape [batch, num_nodes, num_nodes, num_edge_label, 1]
         # edge_types = tf.reshape(edges, [-1, num_nodes*num_nodes, num_edge_label, 1])
-        
+
         encoded_msgs_by_type = []
         for i in range(self.edge_type):
             # mlp_encoder for each edge type.
@@ -201,7 +180,7 @@ class EdgeEncoder(keras.layers.Layer):
         # Only encoded message of the type same as the edge type gets retaind.
         # Force skip 0 type, 0 means no connection, no message.
         edge_msgs = tf.multiply(encoded_msgs_by_type, edge_types[:, :, :, 1:, :])
-        
+
         return edge_msgs
 
 
@@ -215,7 +194,6 @@ class GraphConv(keras.layers.Layer):
             self.edge_aggr = EdgeAttentionAggregator()
         else:
             self.edge_aggr = EdgeSumAggregator()
-        
 
         self.edge_encoder = EdgeEncoder(edge_type, params['edge_encoder'])
 
@@ -236,6 +214,7 @@ class GraphConv(keras.layers.Layer):
         edge_msgs_aggr = self.edge_aggr(edge_msgs, node_states, edges)
 
         # Update node_states
-        node_states = self.node_decoder(tf.concat([node_states, edge_msgs_aggr], axis=-1), training=training)
+        node_states = self.node_decoder(
+            tf.concat([node_states, edge_msgs_aggr], axis=-1), training=training)
 
         return node_states

@@ -74,7 +74,7 @@ class MPNN(keras.Model):
 
         input_shape = [(None, params['time_seg_len'], params['num_nodes'], params['ndims']),
                        (None, params['num_nodes'], params['num_nodes'], params['edge_type']+1)]
-        
+
         inputs = model.build(input_shape)
 
         if return_inputs:

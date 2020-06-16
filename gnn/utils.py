@@ -1,6 +1,5 @@
 import os
 import tensorflow as tf
-from tensorflow import keras
 import numpy as np
 
 
@@ -33,4 +32,4 @@ def save_model(model, log_dir):
 
     model.save_weights(checkpoint)
 
-    return keras.callbacks.ModelCheckpoint(checkpoint, save_weights_only=True)
+    return tf.keras.callbacks.ModelCheckpoint(checkpoint, save_weights_only=True)
