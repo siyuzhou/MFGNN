@@ -1,8 +1,7 @@
-import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 
-from .modules import Conv1D, GraphConv
+from ..convolutions import Conv1D, GraphConv
 
 
 class MPNN(keras.Model):

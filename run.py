@@ -40,7 +40,7 @@ def main():
     model_params.update({'num_nodes': nagents, 'ndims': ndims,
                          'pred_steps': ARGS.pred_steps, 'time_seg_len': seg_len})
 
-    models = {'MPNN': gnn.MPNN, 'MFGNN': gnn.MFGNN, 'HardCoded': gnn.HardCodedMFGNN}
+    models = {'MPNN': gnn.MPNN, 'MFGNN': gnn.MFGNN}
     model = models[ARGS.model].build_model(model_params)
     # model.summary()
 

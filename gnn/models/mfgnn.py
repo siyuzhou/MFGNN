@@ -1,8 +1,9 @@
-import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 
-from .modules import *
+from ..components import MLP
+from ..convolutions import Conv1D, GraphConv
+
 
 class MFGNN(keras.Model):
     def __init__(self, params):
