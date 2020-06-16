@@ -16,6 +16,22 @@ class EdgeSumAggregator(keras.layers.Layer):
         return edge_msg_sum
 
 
+class EdgeMeanAggregator(keras.layers.Layer):
+    """
+    Average messages from incoming edges to the node.
+    """
+
+    def call(self, edge_msgs, node_states, edges):
+        # edge_msg shape [batch, num_nodes, num_nodes, edge_type, out_units]
+        # edges shape [batch, num_nodes, num_nodes, num_edge_labels]
+        in_degrees = tf.reduce_sum(edges[:, :, :, 1:], axis=1, keepdims=True)
+        denoms = tf.expand_dims(in_degrees, -1)
+        denoms = tf.where(denoms == 0, tf.ones_like(denoms), denoms)
+
+        edge_msg_mean = tf.reduce_sum(edge_msgs / denoms, axis=[1, 3])
+        return edge_msg_mean
+
+
 class EdgeAttentionAggregator(keras.layers.Layer):
     """
     Weighted sum of messages from incoming edges. Weights are 
