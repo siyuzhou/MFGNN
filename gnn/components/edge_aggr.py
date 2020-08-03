@@ -38,29 +38,42 @@ class EdgeAttentionAggregator(keras.layers.Layer):
     determined by attention.
     """
 
-    def __init__(self):
+    def __init__(self, out_units, nheads=1):
         super().__init__()
 
-        self.attention = keras.layers.Dense(1, activation='elu')
+        for a in range(nheads):
+            self.attentions.append(keras.layers.Dense(1, activation='elu'))
+
         self.softmax = keras.layers.Softmax(axis=1)
+        self.multihead_dense = keras.layers.Dense(out_units)
 
     def call(self, edge_msgs, node_states, edges):
         # `edge_msg` shape [batch, num_nodes, num_nodes, edge_type, out_units]
         # `node_states` shape [batch, num_nodes, out_units].
         # `edges` shape [batch, num_nodes, num_nodes, num_edge_label]
-        num_nodes, edge_type = edge_msgs.shape[2:4]
+        batch, num_nodes, _, edge_type = edge_msgs.shape[:4]
+
         node_states = tf.expand_dims(tf.expand_dims(node_states, 1), 3)
         # New shape [batch, 1, num_nodes, 1, out_units]
         node_states = tf.tile(node_states, [1, num_nodes, 1, edge_type, 1])
 
-        attentions = self.attention(tf.concat([edge_msgs, node_states], axis=-1))
-        # `attentions` shape [batch, num_nodes, num_nodes, edge_type, 1]
+        multihead_edge_msgs = []
+        for a in self.attentions:
+            attentions = a(tf.concat([edge_msgs, node_states], axis=-1))
+            # `attentions` shape [batch, num_nodes, num_nodes, edge_type, 1]
 
-        bias = (1 - tf.expand_dims(edges[:, :, :, 1:], -1)) * -1e6
-        weights = self.softmax(attentions + bias)
+            bias = (1 - tf.expand_dims(edges[:, :, :, 1:], -1)) * -1e6
+            weights = self.softmax(attentions + bias)
 
-        weighted_edge_msgs = weights * edge_msgs
+            weighted_edge_msgs = weights * edge_msgs
 
-        edge_msg_sum = tf.reduce_sum(weighted_edge_msgs, axis=[1, 3])
+            edge_msg_sum = tf.reduce_sum(weighted_edge_msgs, axis=[1, 3])
+            # shape [batch, num_nodes, out_units]
+            multihead_edge_msgs.append(edge_msg_sum)
 
-        return edge_msg_sum
+        multihead_edge_msgs = tf.stack(multihead_edge_msgs, axis=-1)
+        # shape [batch, num_nodes, out_units, nheads]
+        multihead_edge_msgs = tf.reshape(multihead_edge_msgs, (batch, num_nodes, -1))
+        multihead_edge_msg_sum = self.multihead_dense(multihead_edge_msgs)
+
+        return multihead_edge_msg_sum
