@@ -10,16 +10,20 @@ class MLP(keras.layers.Layer):
         self.hidden_layers = []
         self.dropout_layers = []
 
-        for i, unit in enumerate(units[:-1]):
-            layer = keras.layers.Dense(unit, activation='relu',
-                                       kernel_regularizer=keras.regularizers.l2(kernel_l2),
-                                       name=f'hidden{i}')
-            self.hidden_layers.append(layer)
+        if units:
+            for i, unit in enumerate(units[:-1]):
+                layer = keras.layers.Dense(unit, activation='relu',
+                                           kernel_regularizer=keras.regularizers.l2(kernel_l2),
+                                           name=f'hidden{i}')
+                self.hidden_layers.append(layer)
 
-            dropout_layer = keras.layers.Dropout(dropout, name=f'dropout{i}')
-            self.dropout_layers.append(dropout_layer)
+                dropout_layer = keras.layers.Dropout(dropout, name=f'dropout{i}')
+                self.dropout_layers.append(dropout_layer)
 
-        self.out_layer = keras.layers.Dense(units[-1], activation=activation, name='out_layer')
+            self.out_layer = keras.layers.Dense(units[-1], activation=activation, name='out_layer')
+        else:
+            self.hidden_layers.append(keras.layers.Lambda(lambda x: x))
+            self.dropout_layers.append(keras.layers.Dropout(dropout))
 
         if batch_norm:
             self.batch_norm = keras.layers.BatchNormalization()

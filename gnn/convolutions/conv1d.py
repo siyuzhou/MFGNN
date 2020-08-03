@@ -12,23 +12,21 @@ class Conv1D(keras.layers.Layer):
 
         super().__init__(name=name)
         # time segment length before being reduced to 1 by Conv1D
-        self.seg_len = 2 * len(filters) + 1
+        # self.seg_len = 2 * len(filters) + 1
 
         self.conv1d_layers = []
-        for i, channels in enumerate(filters):
-            name = f'conv{i}'
-            layer = keras.layers.TimeDistributed(
+        for channels in filters:
+            conv = keras.layers.TimeDistributed(
                 keras.layers.Conv1D(channels, 3, activation='relu', name=name))
-            self.conv1d_layers.append(name)
-            setattr(self, name, layer)
+            self.conv1d_layers.append(conv)
 
-        self.channels = channels
+        if not self.conv1d_layers:
+            self.conv1d_layers.append(keras.layers.Lambda(lambda x: x))
 
     def call(self, time_segs):
         # Node state encoder with 1D convolution along timesteps and across ndims as channels.
-        encoded_state = time_segs
-        for name in self.conv1d_layers:
-            conv = getattr(self, name)
-            encoded_state = conv(encoded_state)
+        condensed_state = time_segs
+        for conv in self.conv1d_layers:
+            condensed_state = conv(condensed_state)
 
-        return encoded_state
+        return condensed_state
