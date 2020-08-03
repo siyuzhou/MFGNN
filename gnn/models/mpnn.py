@@ -19,6 +19,7 @@ class MPNN(keras.Model):
 
         self.graph_conv = GraphConv(params['num_nodes'], params['edge_type'],
                                     params, name='GraphConv')
+        self.num_graph_convs = params.get('num_graph_convs', 1)
 
     def build(self, input_shape):
         t = keras.layers.Input(input_shape[0][1:])
@@ -32,10 +33,10 @@ class MPNN(keras.Model):
     def _pred_next(self, time_segs, edges, training=False):
         condensed_state = self.conv1d(time_segs)
         # condensed_state shape [batch, num_nodes, 1, filters]
-        condensed_state = tf.squeeze(condensed_state, axis=2)
+        node_state = tf.squeeze(condensed_state, axis=2)
         # condensed_state shape [batch, num_nodes, filters]
-
-        node_state = self.graph_conv(condensed_state, edges, training)
+        for _ in range(self.num_graph_convs):
+            node_state = self.graph_conv(node_state, edges, training)
 
         # Predicted difference added to the prev state.
         # The last state in each timeseries of the stack.

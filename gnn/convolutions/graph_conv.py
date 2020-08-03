@@ -8,13 +8,17 @@ class GraphConv(tf.keras.layers.Layer):
 
         self.node_prop = NodePropagator()
 
-        if params['edge_aggregator'] == "attention":
-        self.edge_aggr = EdgeAttentionAggregator(params['edge_aggregator']['attention_heads'])
-        elif params['edge_aggregator'] == "mean":
+        if params['edge_aggregator']['type'] == "attention":
+            self.edge_aggr = EdgeAttentionAggregator(
+                params['edge_aggregator']['units'],
+                params['edge_aggregator']['heads'])
+        elif params['edge_aggregator']['type'] == "mean":
             self.edge_aggr = EdgeMeanAggregator()
             print('mean used')
-        else:
+        elif params['edge_aggregator']['type'] == 'sum':
             self.edge_aggr = EdgeSumAggregator()
+        else:
+            raise ValueError('edge_aggregator type unknown')
 
         self.edge_encoder = EdgeEncoder(edge_type, params['edge_encoder'])
 
