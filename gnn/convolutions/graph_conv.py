@@ -9,7 +9,7 @@ class GraphConv(tf.keras.layers.Layer):
         self.node_prop = NodePropagator()
 
         if params['edge_aggregator'] == "attention":
-            self.edge_aggr = EdgeAttentionAggregator()
+        self.edge_aggr = EdgeAttentionAggregator(params['edge_aggregator']['attention_heads'])
         elif params['edge_aggregator'] == "mean":
             self.edge_aggr = EdgeMeanAggregator()
             print('mean used')
