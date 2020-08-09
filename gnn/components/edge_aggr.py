@@ -16,6 +16,24 @@ class EdgeSumAggregator(keras.layers.Layer):
         return edge_msg_sum
 
 
+class EdgeSumAggregatorSparse(keras.layers.Layer):
+    def __init__(self, edges):
+        if len(edges.shape) != 2 or edges.shape[0] != edges.shape[1]:
+            raise ValueError('`edges` must be a square matrix')
+        super().__init__()
+        # `edge_targets` in shape [num_edges, num_nodes].
+        edge_targets = tf.where(edges)[:, 1]
+        self._edge_targets = tf.one_hot(edge_targets, len(edges))
+
+    def call(self, edge_msgs):
+        # edge_msg shape [batch, num_edges, edge_type, out_units]
+        # Sum edge msgs in each neighborhood.
+        edge_msg_sum = tf.transpose(tf.tensordot(edge_msg_sum, self._edge_targets, axes=[[1], [0]]),
+                                    perm=[0, 2, 1])  # Shape [batch, num_nodes, out_units].
+
+        return edge_msg_sum
+
+
 class EdgeMeanAggregator(keras.layers.Layer):
     """
     Average messages from incoming edges to the node.
