@@ -20,9 +20,6 @@ class Conv1D(keras.layers.Layer):
                 keras.layers.Conv1D(channels, 3, activation='relu', name=name))
             self.conv1d_layers.append(conv)
 
-        if not self.conv1d_layers:
-            self.conv1d_layers.append(keras.layers.Lambda(lambda x: x))
-
     def call(self, time_segs):
         # Node state encoder with 1D convolution along timesteps and across ndims as channels.
         condensed_state = time_segs

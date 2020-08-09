@@ -38,20 +38,20 @@ class EdgeAttentionAggregator(keras.layers.Layer):
     determined by attention.
     """
 
-    def __init__(self, out_units, nheads=1):
+    def __init__(self, nheads=1):
         super().__init__()
 
+        self.attentions = []
         for a in range(nheads):
             self.attentions.append(keras.layers.Dense(1, activation='elu'))
 
         self.softmax = keras.layers.Softmax(axis=1)
-        self.multihead_dense = keras.layers.Dense(out_units)
 
     def call(self, edge_msgs, node_states, edges):
         # `edge_msg` shape [batch, num_nodes, num_nodes, edge_type, out_units]
         # `node_states` shape [batch, num_nodes, out_units].
         # `edges` shape [batch, num_nodes, num_nodes, num_edge_label]
-        batch, num_nodes, _, edge_type = edge_msgs.shape[:4]
+        num_nodes, edge_type = edge_msgs.shape[2:4]
 
         node_states = tf.expand_dims(tf.expand_dims(node_states, 1), 3)
         # New shape [batch, 1, num_nodes, 1, out_units]
@@ -71,9 +71,5 @@ class EdgeAttentionAggregator(keras.layers.Layer):
             # shape [batch, num_nodes, out_units]
             multihead_edge_msgs.append(edge_msg_sum)
 
-        multihead_edge_msgs = tf.stack(multihead_edge_msgs, axis=-1)
-        # shape [batch, num_nodes, out_units, nheads]
-        multihead_edge_msgs = tf.reshape(multihead_edge_msgs, (batch, num_nodes, -1))
-        multihead_edge_msg_sum = self.multihead_dense(multihead_edge_msgs)
-
-        return multihead_edge_msg_sum
+        # shape [batch, num_nodes, out_units * nheads]
+        return tf.concat(multihead_edge_msgs, axis=-1)

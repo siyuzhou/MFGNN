@@ -9,9 +9,7 @@ class GraphConv(tf.keras.layers.Layer):
         self.node_prop = NodePropagator()
 
         if params['edge_aggregator']['type'] == "attention":
-            self.edge_aggr = EdgeAttentionAggregator(
-                params['edge_aggregator']['units'],
-                params['edge_aggregator']['heads'])
+            self.edge_aggr = EdgeAttentionAggregator(params['edge_aggregator']['heads'])
         elif params['edge_aggregator']['type'] == "mean":
             self.edge_aggr = EdgeMeanAggregator()
             print('mean used')
@@ -22,7 +20,7 @@ class GraphConv(tf.keras.layers.Layer):
 
         self.edge_encoder = EdgeEncoder(edge_type, params['edge_encoder'])
 
-        self.node_updater = NodeUpdater(params['node_updater'])
+        self.node_updater = NodeUpdater(params['ndims'], params['node_updater'])
 
     def call(self, node_states, edges, training=False):
         # Propagate node states.
