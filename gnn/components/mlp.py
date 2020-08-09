@@ -3,9 +3,6 @@ from tensorflow import keras
 
 class MLP(keras.layers.Layer):
     def __init__(self, units, dropout=0., batch_norm=False, kernel_l2=0., activation='relu', name=None):
-        if not units:
-            raise ValueError("'units' must not be empty")
-
         super().__init__(name=name)
         self.hidden_layers = []
         self.dropout_layers = []
@@ -24,6 +21,7 @@ class MLP(keras.layers.Layer):
         else:
             self.hidden_layers.append(keras.layers.Lambda(lambda x: x))
             self.dropout_layers.append(keras.layers.Dropout(dropout))
+            self.out_layer = keras.layers.Lambda(lambda x: x)
 
         if batch_norm:
             self.batch_norm = keras.layers.BatchNormalization()
