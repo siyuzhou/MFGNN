@@ -3,6 +3,7 @@ import argparse
 import json
 
 import numpy as np
+# import tensorflow as tf
 
 import gnn
 from gnn.data import load_data, preprocess_data
@@ -48,6 +49,7 @@ def main():
 
     if ARGS.train:
         checkpoint = gnn.utils.save_model(model, ARGS.log_dir)
+        # tb_callback = tf.keras.callbacks.TensorBoard(log_dir=ARGS.log_dir, histogram_freq=1)
 
         history = model.fit(input_data, expected_time_segs,
                             epochs=ARGS.epochs, batch_size=ARGS.batch_size,
